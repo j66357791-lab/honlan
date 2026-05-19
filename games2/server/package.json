@@ -1,0 +1,19 @@
+{
+  "name": "giant-racing-server",
+  "version": "3.0.0",
+  "description": "巨人赛跑游戏后端服务 - Mongoose + JWT + 管理员后台",
+  "type": "module",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node src/app.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.0",
+    "morgan": "^1.10.0"
+  }
+}
