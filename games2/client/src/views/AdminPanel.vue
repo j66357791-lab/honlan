@@ -24,17 +24,36 @@
             <span class="user-name">{{ user.phone }}</span>
             <span v-if="user.role === 'admin'" class="role-badge admin">管理员</span>
             <span v-else-if="user.banned" class="role-badge banned">已封禁</span>
+            <span v-else-if="user.isHighRisk" class="role-badge high-risk">黑名单</span>
+            <span v-else-if="user.isWhitelisted" class="role-badge whitelist">白名单</span>
             <span v-else class="role-badge user">正常</span>
           </div>
+          
           <div class="user-balance">
             <span class="balance-num">{{ user.balance.toLocaleString() }}</span>
             <span class="balance-unit">积分</span>
           </div>
+
+          <!-- 新增：风控数据展示 -->
+          <div class="user-risk" v-if="user.role !== 'admin'">
+            <span>今盈: <span :class="user.todayProfit >= 0 ? 'text-win' : 'text-lose'">{{ user.todayProfit || 0 }}</span></span>
+            <span>总盈: <span :class="user.historyProfit >= 0 ? 'text-win' : 'text-lose'">{{ user.historyProfit || 0 }}</span></span>
+            <span>风险: {{ user.riskIndex || 0 }}%</span>
+          </div>
+
           <div v-if="user.role !== 'admin'" class="user-actions">
             <button v-if="!user.banned" class="btn btn-sm btn-danger" @click="banUser(user._id)">封禁</button>
             <button v-else class="btn btn-sm btn-success" @click="unbanUser(user._id)">解封</button>
             <button class="btn btn-sm btn-success" @click="openAdjust(user._id, 'add')">加积分</button>
             <button class="btn btn-sm btn-danger" @click="openAdjust(user._id, 'sub')">扣积分</button>
+            
+            <!-- 新增：风控黑白名单操作 -->
+            <button class="btn btn-sm" :class="user.isHighRisk ? 'btn-success' : 'btn-danger'" @click="toggleRisk(user._id, user.isHighRisk)">
+              {{ user.isHighRisk ? '取消黑名单' : '加黑名单' }}
+            </button>
+            <button class="btn btn-sm" :class="user.isWhitelisted ? 'btn-success' : 'btn-danger'" @click="toggleWhitelist(user._id, user.isWhitelisted)">
+              {{ user.isWhitelisted ? '取消白名单' : '加白名单' }}
+            </button>
           </div>
         </div>
       </div>
@@ -142,8 +161,15 @@ function openAdjust(userId, type) {
   adjustModal.value = true
 }
 
+// 【安全修复 4.2】余额调整增加二次确认
 async function doAdjust() {
   if (!adjustAmount.value || adjustAmount.value <= 0) return
+  
+  const actionText = adjustType.value === 'add' ? '增加' : '扣除'
+  if (!window.confirm(`⚠️ 资金操作确认：确定为该用户${actionText} ${adjustAmount.value} 积分吗？`)) {
+    return // 用户点击取消，阻止操作
+  }
+
   try {
     const res = await authFetch('/api/admin/adjust-balance', {
       method: 'POST',
@@ -188,6 +214,37 @@ async function unbanUser(userId) {
   } catch (e) { console.error('[管理员] 解封失败', e) }
 }
 
+// ================= 新增：风控黑白名单操作 =================
+async function toggleRisk(userId, currentStatus) {
+  const actionText = currentStatus ? '取消黑名单' : '加入黑名单'
+  if (!window.confirm(`确认${actionText}吗？黑名单用户将被风控系统极端针对。`)) return
+  
+  try {
+    const res = await authFetch('/api/admin/toggle-risk', {
+      method: 'POST',
+      body: JSON.stringify({ userId })
+    })
+    const data = await res.json()
+    if (res.ok) fetchUsers()
+    else { alert(data.error) }
+  } catch (e) { console.error('[管理员] 风控操作失败', e) }
+}
+
+async function toggleWhitelist(userId, currentStatus) {
+  const actionText = currentStatus ? '取消白名单' : '加入白名单'
+  if (!window.confirm(`确认${actionText}吗？白名单用户将豁免风控系统拦截。`)) return
+  
+  try {
+    const res = await authFetch('/api/admin/toggle-whitelist', {
+      method: 'POST',
+      body: JSON.stringify({ userId })
+    })
+    const data = await res.json()
+    if (res.ok) fetchUsers()
+    else { alert(data.error) }
+  } catch (e) { console.error('[管理员] 风控操作失败', e) }
+}
+
 onMounted(() => { fetchUsers(); fetchBets() })
 </script>
 
@@ -211,8 +268,16 @@ onMounted(() => { fetchUsers(); fetchBets() })
 .role-badge.admin { background:rgba(255,215,0,0.15); color:var(--color-gold); }
 .role-badge.user { background:rgba(0,230,118,0.15); color:var(--color-success); }
 .role-badge.banned { background:rgba(255,23,68,0.15); color:var(--color-danger); }
-.user-balance { font-size:14px; color:var(--color-text-dim); margin-bottom:8px; }
+/* 新增风控徽章样式 */
+.role-badge.high-risk { background:rgba(255,0,0,0.2); color:#ff4d4f; border:1px solid #ff4d4f; }
+.role-badge.whitelist { background:rgba(0,230,118,0.2); color:#00e676; border:1px solid #00e676; }
+
+.user-balance { font-size:14px; color:var(--color-text-dim); margin-bottom:4px; }
 .balance-num { font-size:20px; font-weight:800; color:var(--color-gold); }
+
+/* 新增风控数据样式 */
+.user-risk { display:flex; gap:12px; font-size:12px; color:var(--color-text-dim); margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.05); }
+
 .user-actions { display:flex; gap:6px; flex-wrap:wrap; }
 .bet-card { background:var(--color-panel); border-radius:8px; padding:10px 12px; margin-bottom:6px; }
 .bet-main { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
