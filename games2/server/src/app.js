@@ -1,6 +1,6 @@
 /**
- * 巨人赛跑 - 后端服务入口 v3.6
- * [安全加固] 修复严重漏洞：环境变量管理、CORS白名单、Helmet安全头
+ * 巨人赛跑 - 后端服务入口 v3.7
+ * [安全加固] 修复严重漏洞：环境变量管理、CORS白名单、Helmet安全头、Trust Proxy
  */
 import express from 'express';
 import cors from 'cors';
@@ -24,12 +24,19 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ==========================================
+// 修复反向代理环境下的 IP 识别问题
+// ==========================================
+// 信任 Zeabur/Nginx 等反向代理的最后一跳，解决 ERR_ERL_UNEXPECTED_X_FORWARDED_FOR 报错
+// 这样 express-rate-limit 才能拿到用户的真实 IP，而不是代理服务器的内网 IP
+app.set('trust proxy', 1);
+
+// ==========================================
 // 修复 2.3：CORS 域名白名单限制
 // ==========================================
 const whitelist = [
   'http://localhost:5173',
   'http://localhost:3000',
-  process.env.FRONTEND_URL // 从环境变量读取生产环境域名
+  process.env.FRONTEND_URL // 从环境变量读取生产环境域名 (注意不要带末尾的 /)
 ].filter(Boolean);
 
 const corsOptions = {
@@ -47,8 +54,8 @@ const corsOptions = {
 
 // 修复 3.4：请求频率限制
 const apiLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000,
-  max: 60,
+  windowMs: 1 * 60 * 1000, // 1 分钟
+  max: 60, // 每 IP 每分钟 60 次
   message: { error: '操作过于频繁，请稍后再试' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -84,6 +91,7 @@ async function start() {
       console.log(`🚀 地址：http://localhost:${PORT}`);
       console.log(`🛡️ CORS 白名单：${whitelist.join(', ')}`);
       console.log(`🛡️ 安全响应头：已启用 (Helmet)`);
+      console.log(`🛡️ 信任代理：已启用 (Trust Proxy)`);
       console.log(`⏱️ 频率限制：每IP每分钟 60 次请求`);
       console.log('------------------------------------------');
       console.log('🎮 [巨人赛跑] 参数配置:');
