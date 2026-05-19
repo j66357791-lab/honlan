@@ -11,7 +11,7 @@
         <div style="width:44px"></div>
       </div>
 
-      <!-- 快捷问题（无消息且未关闭时展示） -->
+      <!-- 快捷问题 -->
       <div v-if="messages.length === 0 && sessionStatus !== 'closed'" class="quick-area">
         <div class="quick-greeting">👋 您好，请问有什么可以帮您？</div>
         <div class="quick-list">
@@ -35,10 +35,8 @@
             'msg-system': msg.sender === 'system'
           }"
         >
-          <!-- 系统消息 -->
           <div v-if="msg.sender === 'system'" class="sys-msg">{{ msg.content }}</div>
 
-          <!-- 客服/bot消息（左侧） -->
           <template v-else-if="msg.sender === 'admin' || msg.sender === 'bot'">
             <div class="avatar" :class="msg.sender === 'bot' ? 'bot-av' : 'admin-av'">
               {{ msg.sender === 'bot' ? '🤖' : '🧑‍💼' }}
@@ -50,7 +48,6 @@
             </div>
           </template>
 
-          <!-- 自己消息（右侧） -->
           <template v-else>
             <div class="bubble-wrap">
               <div class="bubble self-bubble">{{ msg.content }}</div>
@@ -60,20 +57,18 @@
           </template>
         </div>
 
-        <!-- 排队动画 -->
         <div v-if="sessionStatus === 'waiting' && !hasBotTalking" class="waiting-hint">
           <div class="dots"><span></span><span></span><span></span></div>
           <span>人工客服正在赶来...</span>
         </div>
 
-        <!-- 会话已结束 + 重新咨询 -->
         <div v-if="sessionStatus === 'closed'" class="closed-area">
           <div class="closed-text">— 会话已结束 —</div>
           <button class="reconsult-btn" @click="reConsult">🔄 重新咨询</button>
         </div>
       </div>
 
-      <!-- 底部输入栏 -->
+      <!-- 输入栏 -->
       <div class="chat-input-bar" v-if="sessionStatus !== 'closed'">
         <input
           v-model="inputText"
@@ -115,7 +110,6 @@ const statusText = computed(() => {
   return '在线'
 })
 
-// 判断最近是否有bot在回复（避免排队动画和bot冲突）
 const hasBotTalking = computed(() => {
   const last = messages.value[messages.value.length - 1]
   return last && last.sender === 'bot'
@@ -142,14 +136,27 @@ function formatTime(t) {
   return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
 }
 
+// ========== 自动标记已读（清除红点） ==========
+
+// 监听消息变化：滚动到底部 + 自动标记已读
 watch(messages, () => {
   nextTick(() => {
     if (chatBodyEl.value) chatBodyEl.value.scrollTop = chatBodyEl.value.scrollHeight
   })
+  // 有新消息时自动标记已读（用户正在查看聊天）
+  if (currentSessionId.value) {
+    markRead(currentSessionId.value)
+  }
 }, { deep: true })
+
+// 监听 sessionId 变化：加载完历史后标记已读
+watch(currentSessionId, (newVal) => {
+  if (newVal) markRead(newVal)
+})
 
 onMounted(() => {
   connectChat()
+  // 如果已有会话，立即标记已读
   if (currentSessionId.value) markRead(currentSessionId.value)
 })
 </script>
@@ -160,7 +167,6 @@ onMounted(() => {
   z-index: 200; display: flex; flex-direction: column;
 }
 
-/* 顶部栏 */
 .chat-topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 12px; background: #fff;
@@ -181,7 +187,6 @@ onMounted(() => {
 .chat-status.closed { color: #999; }
 .chat-status.offline { color: #bbb; }
 
-/* 快捷问题 */
 .quick-area {
   flex: 1; padding: 30px 20px;
   display: flex; flex-direction: column; align-items: center;
@@ -199,7 +204,6 @@ onMounted(() => {
 }
 .quick-btn:active { background: #f0f0f0; }
 
-/* 消息列表 */
 .chat-body {
   flex: 1; overflow-y: auto; padding: 16px;
   display: flex; flex-direction: column; gap: 12px;
@@ -208,7 +212,6 @@ onMounted(() => {
 .msg-row.msg-self { flex-direction: row-reverse; }
 .msg-row.msg-system { justify-content: center; }
 
-/* 头像 */
 .avatar {
   width: 36px; height: 36px; border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
@@ -218,15 +221,11 @@ onMounted(() => {
 .bot-av { background: #e3f2fd; }
 .self-av { background: #fff3e0; }
 
-/* 气泡 */
 .bubble-wrap { max-width: 70%; }
-.sender-label {
-  font-size: 11px; color: #999; margin-bottom: 3px; padding-left: 2px;
-}
+.sender-label { font-size: 11px; color: #999; margin-bottom: 3px; padding-left: 2px; }
 .bubble {
   padding: 10px 14px; border-radius: 8px;
-  font-size: 14px; line-height: 1.6; word-break: break-word;
-  white-space: pre-line;
+  font-size: 14px; line-height: 1.6; word-break: break-word; white-space: pre-line;
 }
 .other-bubble {
   background: #fff; color: #333;
@@ -244,14 +243,12 @@ onMounted(() => {
 .bubble-time { font-size: 10px; color: #bbb; margin-top: 3px; padding: 0 4px; }
 .bubble-time.right { text-align: right; }
 
-/* 系统消息 */
 .sys-msg {
   font-size: 12px; color: #999;
   padding: 4px 14px; background: rgba(0,0,0,0.03);
   border-radius: 12px;
 }
 
-/* 排队动画 */
 .waiting-hint {
   display: flex; align-items: center; gap: 8px;
   justify-content: center; color: #999; font-size: 13px; padding: 8px 0;
@@ -269,7 +266,6 @@ onMounted(() => {
   40% { transform: scale(1); opacity: 1; }
 }
 
-/* 会话结束 + 重新咨询 */
 .closed-area {
   display: flex; flex-direction: column; align-items: center;
   gap: 12px; padding: 20px 0;
@@ -278,12 +274,10 @@ onMounted(() => {
 .reconsult-btn {
   padding: 10px 32px; border-radius: 22px;
   border: 1px solid #1bb069; background: #fff;
-  color: #1bb069; font-size: 14px; font-weight: 600;
-  cursor: pointer;
+  color: #1bb069; font-size: 14px; font-weight: 600; cursor: pointer;
 }
 .reconsult-btn:active { background: #f0faf5; }
 
-/* 输入栏 */
 .chat-input-bar {
   display: flex; gap: 8px; padding: 10px 12px;
   background: #fff; border-top: 1px solid #e8e8e8; flex-shrink: 0;
@@ -303,7 +297,6 @@ onMounted(() => {
 .send-btn:active:not(:disabled) { background: #17a05c; }
 .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
-/* 过渡 */
 .slide-right-enter-active,
 .slide-right-leave-active { transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1); }
 .slide-right-enter-from { transform: translateX(100%); }
