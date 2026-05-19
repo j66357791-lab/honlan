@@ -10,7 +10,7 @@
 
     <!-- Tab 内容区 -->
     <div class="tab-content">
-      <!-- ====== 游戏（共用） ====== -->
+      <!-- ====== 游戏 ====== -->
       <div v-show="activeTab === 'game'" class="tab-panel">
         <h2>🎮 选择游戏</h2>
         <div class="game-card" @click="enterGiantRunner">
@@ -64,7 +64,6 @@
       <div v-if="isAdmin" v-show="activeTab === 'reception'" class="tab-panel">
         <h2>📋 接待台</h2>
 
-        <!-- 统计卡片 -->
         <div class="reception-stats">
           <div class="stat-card waiting-card">
             <div class="stat-num">{{ receptionWaiting }}</div>
@@ -76,7 +75,6 @@
           </div>
         </div>
 
-        <!-- 等待列表 -->
         <div v-if="receptionWaitingList.length" class="reception-list">
           <div class="reception-list-title">🕐 等待接入</div>
           <div
@@ -91,19 +89,17 @@
           </div>
         </div>
 
-        <!-- 无等待 -->
         <div v-else class="reception-empty">
           <div>✅</div>
           <span>暂无等待接入的用户</span>
         </div>
 
-        <!-- 进入工作台按钮 -->
         <button class="reception-enter" @click="router.push('/admin/chat')">
           进入工作台 ›
         </button>
       </div>
 
-      <!-- ====== 活动（共用） ====== -->
+      <!-- ====== 活动 ====== -->
       <div v-show="activeTab === 'activity'" class="tab-panel">
         <h2>🎉 活动中心</h2>
         <div class="activity-placeholder">
@@ -163,14 +159,17 @@
       >
         <span class="nav-icon">{{ activeTab === tab.key ? tab.activeIcon : tab.icon }}</span>
         <span class="nav-label">{{ tab.label }}</span>
+        <!-- 用户：消息红点 -->
         <span
           v-if="tab.key === 'message' && !isAdmin && unreadCount > 0"
           class="nav-badge"
         >{{ unreadCount }}</span>
+        <!-- 管理员：接待台红点（等待数 + 未读消息数） -->
         <span
-          v-if="tab.key === 'reception' && isAdmin && receptionWaiting > 0"
+          v-if="tab.key === 'reception' && isAdmin && (receptionWaiting > 0 || unreadCount > 0)"
           class="nav-badge"
-        >{{ receptionWaiting }}</span>
+          :class="{ 'dot-only': receptionWaiting === 0 && unreadCount > 0 }"
+        >{{ receptionWaiting > 0 ? receptionWaiting : '' }}</span>
       </div>
     </nav>
 
@@ -191,7 +190,7 @@ const router = useRouter()
 const {
   currentUser, isAdmin, logout, refreshUser, displayBalance
 } = useAuth()
-const { unreadCount, connect: connectChat, fetchSessions } = useChat()
+const { unreadCount, connect: connectChat, fetchSessions, clearUnread } = useChat()
 
 const userPhone = computed(() => currentUser.value?.phone || '未登录')
 
@@ -223,8 +222,11 @@ const displayTabs = computed(() => isAdmin.value ? adminTabs : userTabs)
 
 function onTabClick(key) {
   activeTab.value = key
-  // 管理员切到接待台时刷新数据
-  if (key === 'reception') loadReceptionData()
+  // 管理员切到接待台：刷新数据 + 清除红点
+  if (key === 'reception' && isAdmin.value) {
+    loadReceptionData()
+    clearUnread()
+  }
 }
 
 // ========== 接待台数据 ==========
@@ -267,10 +269,9 @@ onMounted(async () => {
   await refreshUser()
   connectChat()
   if (isAdmin.value) loadReceptionData()
-  // 管理员每15秒刷新接待台数据
   refreshTimer = setInterval(() => {
-    if (isAdmin.value && activeTab.value === 'reception') loadReceptionData()
-  }, 15000)
+    if (isAdmin.value) loadReceptionData()
+  }, 10000)
 })
 
 onUnmounted(() => {
@@ -285,7 +286,6 @@ onUnmounted(() => {
   position: relative; overflow: hidden;
 }
 
-/* ========== 顶部栏 ========== */
 .lobby-header {
   display: flex; justify-content: space-between; align-items: center;
   padding: 12px 16px;
@@ -298,7 +298,6 @@ onUnmounted(() => {
 .user-info span { display: flex; align-items: center; gap: 5px; }
 .balance { color: #d4af37; font-weight: bold; }
 
-/* ========== Tab 内容区 ========== */
 .tab-content { flex: 1; overflow-y: auto; padding-bottom: 68px; }
 .tab-panel { padding: 20px 16px; }
 .tab-panel h2 {
@@ -306,7 +305,6 @@ onUnmounted(() => {
   text-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 
-/* ====== 游戏卡片 ====== */
 .game-card {
   width: 100%; max-width: 400px; margin: 0 auto 16px;
   background: rgba(255, 248, 220, 0.8);
@@ -321,7 +319,6 @@ onUnmounted(() => {
 .game-info h3 { margin: 0 0 5px; font-size: 18px; color: #333; }
 .game-info p { margin: 0; font-size: 12px; color: #666; }
 
-/* ====== 用户消息页 ====== */
 .msg-card {
   display: flex; align-items: center; gap: 14px;
   padding: 16px; border-radius: 12px;
@@ -353,7 +350,6 @@ onUnmounted(() => {
 .msg-empty { text-align: center; padding: 40px 0; color: #999; font-size: 14px; }
 .msg-empty div { font-size: 40px; margin-bottom: 8px; }
 
-/* ====== 管理员接待台 ====== */
 .reception-stats { display: flex; gap: 12px; margin-bottom: 20px; }
 .stat-card {
   flex: 1; text-align: center; padding: 20px 12px;
@@ -393,12 +389,8 @@ onUnmounted(() => {
 }
 .ri-name { font-size: 14px; font-weight: 600; color: #333; }
 .ri-time { font-size: 11px; color: #999; }
-
-.reception-empty {
-  text-align: center; padding: 30px 0; color: #999; font-size: 14px;
-}
+.reception-empty { text-align: center; padding: 30px 0; color: #999; font-size: 14px; }
 .reception-empty div { font-size: 36px; margin-bottom: 8px; }
-
 .reception-enter {
   width: 100%; padding: 14px; border-radius: 12px; border: none;
   background: #1bb069; color: #fff; font-size: 16px; font-weight: 700;
@@ -406,7 +398,6 @@ onUnmounted(() => {
 }
 .reception-enter:active { background: #17a05c; }
 
-/* ====== 管理员后台面板 ====== */
 .admin-menu {
   background: rgba(255, 248, 220, 0.75);
   border: 1px solid rgba(212, 175, 55, 0.2);
@@ -424,14 +415,12 @@ onUnmounted(() => {
 .ai-icon { font-size: 18px; width: 24px; text-align: center; }
 .ai-text { flex: 1; font-size: 14px; color: #444; }
 .ai-arrow { font-size: 16px; color: #ccc; }
-
 .admin-enter {
   width: 100%; padding: 14px; border-radius: 12px; border: none;
   background: #d4af37; color: #fff; font-size: 16px; font-weight: 700;
   cursor: pointer;
 }
 .admin-enter:active { background: #b8972e; }
-
 .logout-btn {
   width: 100%; padding: 14px; border-radius: 12px; margin-top: 12px;
   border: 1px solid rgba(220, 80, 80, 0.3);
@@ -440,13 +429,11 @@ onUnmounted(() => {
 }
 .logout-btn:active { background: rgba(220, 80, 80, 0.15); }
 
-/* ====== 活动占位 ====== */
 .activity-placeholder { text-align: center; padding: 60px 0; }
 .activity-icon { font-size: 56px; margin-bottom: 12px; }
 .activity-text { font-size: 17px; color: #d4af37; font-weight: 600; }
 .activity-sub { font-size: 13px; color: #999; margin-top: 6px; }
 
-/* ========== 底部导航栏 ========== */
 .bottom-nav {
   position: fixed; bottom: 0; left: 0; right: 0;
   display: flex; height: 58px;
@@ -464,12 +451,26 @@ onUnmounted(() => {
 .nav-label { font-size: 10px; color: #888; }
 .nav-item.active .nav-label { color: #d4af37; font-weight: 600; }
 .nav-item.active .nav-icon { transform: scale(1.15); }
+
+/* 红点徽章 */
 .nav-badge {
   position: absolute; top: 3px; right: calc(50% - 18px);
   background: #e74c3c; color: #fff; font-size: 10px;
   min-width: 16px; height: 16px; border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
   font-weight: 700; padding: 0 3px;
+  animation: badgePop 0.3s ease;
+}
+/* 纯圆点（无数字） */
+.nav-badge.dot-only {
+  min-width: 8px; height: 8px; padding: 0;
+  font-size: 0; right: calc(50% - 4px);
+  top: 6px;
+}
+@keyframes badgePop {
+  0% { transform: scale(0); }
+  60% { transform: scale(1.3); }
+  100% { transform: scale(1); }
 }
 
 @media (max-width: 480px) {
