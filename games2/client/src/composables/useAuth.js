@@ -4,6 +4,7 @@
  */
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { request } from './request.js' // 新增：引入请求封装
 
 const currentUser = ref(null)
 const token = ref(localStorage.getItem('token') || '')
@@ -11,14 +12,18 @@ const isLoggedIn = computed(() => !!token.value)
 const isAdmin = computed(() => currentUser.value?.role === 'admin')
 
 function getAuthHeaders() {
-  return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token.value}` }
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token.value}`
+  }
 }
 
 async function authFetch(url, options = {}) {
   const headers = { ...getAuthHeaders(), ...(options.headers || {}) }
   console.log(`[API] ${options.method || 'GET'} ${url}`)
   try {
-    const res = await fetch(url, { ...options, headers })
+    // 修改：使用 request 代替 fetch，自动加上后端域名
+    const res = await request(url, { ...options, headers })
     if (res.status === 401) {
       console.log('[API] Token过期，自动登出')
       logout()
@@ -33,9 +38,9 @@ async function authFetch(url, options = {}) {
 
 async function login(phone, password) {
   console.log(`[认证] 登录请求: phone=${phone}`)
-  const res = await fetch('/api/login', {
+  // 修改：使用 request 代替 fetch
+  const res = await request('/api/login', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ phone, password })
   })
   const data = await res.json()
@@ -54,9 +59,9 @@ async function login(phone, password) {
 
 async function register(phone, password) {
   console.log(`[认证] 注册请求: phone=${phone}`)
-  const res = await fetch('/api/register', {
+  // 修改：使用 request 代替 fetch
+  const res = await request('/api/register', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ phone, password })
   })
   const data = await res.json()
@@ -108,5 +113,16 @@ async function refreshUser() {
 restoreUser()
 
 export function useAuth() {
-  return { currentUser, token, isLoggedIn, isAdmin, getAuthHeaders, authFetch, login, register, logout, refreshUser }
+  return {
+    currentUser,
+    token,
+    isLoggedIn,
+    isAdmin,
+    getAuthHeaders,
+    authFetch,
+    login,
+    register,
+    logout,
+    refreshUser
+  }
 }
