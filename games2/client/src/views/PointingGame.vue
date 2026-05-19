@@ -103,8 +103,8 @@ import ConfettiEffect from '../components/ConfettiEffect.vue'
 import ToastContainer from '../components/ToastContainer.vue'
 
 const router = useRouter()
-// 🔥 引入全局 auth, 资产 和 updateBalance
-const { currentUser, isAdmin, balance, displayBalance, updateBalance } = useAuth()
+// 🔥 引入全局 auth, 资产, updateBalance 和 authFetch
+const { currentUser, isAdmin, balance, displayBalance, updateBalance, authFetch } = useAuth()
 
 const isAnimating = ref(false)
 const showResult = ref(false)
@@ -212,10 +212,9 @@ async function startGame() {
   }
 
   try {
-    const token = localStorage.getItem('token')
-    const res = await fetch('/api/pointing/bet', {
+    // 🚨 修改点：使用 authFetch 替代原生 fetch，自动带上 BASE_URL 和 Token
+    const res = await authFetch('/api/pointing/bet', { 
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ bets })
     })
     const data = await res.json()
