@@ -36,6 +36,7 @@
       <!-- 路子图 -->
       <div class="road-map-title">开奖路子图</div>
       <div class="road-map-grid">
+        <!-- 渲染顺序：左旧右新 -->
         <div v-for="(item, index) in currentRoadMap" :key="index" class="road-dot" :class="item.result">
           {{ item.result === 'red' ? '红' : item.result === 'blue' ? '蓝' : '和' }}
         </div>
@@ -50,7 +51,7 @@ import { ref, computed } from 'vue'
 
 const props = defineProps({
   visible: Boolean,
-  history: Array // 从父组件接收历史记录
+  history: Array // 从父组件接收历史记录 (后端返回的是倒序：最新在前)
 })
 
 const emit = defineEmits(['close'])
@@ -59,6 +60,7 @@ const activeTab = ref(10)
 // 根据Tab截取对应期数的数据
 const currentList = computed(() => {
   if (!props.history) return []
+  // 后端返回的是最新在前，slice(0, N) 截取的就是最新的 N 条
   return props.history.slice(0, activeTab.value)
 })
 
@@ -85,11 +87,11 @@ const currentStats = computed(() => {
   }
 })
 
-// 路子图数据
+// 路子图数据：保证左旧右新
 const currentRoadMap = computed(() => {
   return currentList.value.map(item => ({
-    result: item.result // 假设后端返回的字段叫 result (值为 'red', 'blue', 'draw')
-  })).reverse() // 倒序，最新在右下角
+    result: item.result
+  })).reverse() // 将最新在前反转为旧新在前，渲染时左边就是最旧的，右边是最新的
 })
 </script>
 
@@ -119,16 +121,20 @@ const currentRoadMap = computed(() => {
 .stat-item .percent { text-align:right; color:rgba(255,255,255,0.6); }
 
 .road-map-title { padding:0 16px; font-size:12px; color:rgba(255,255,255,0.4); margin-bottom:8px; }
+
+/* 优化：路子图网格，固定每行10个 */
 .road-map-grid { 
   padding:0 16px 16px; 
   display:grid; 
-  grid-template-columns:repeat(auto-fill, minmax(24px, 1fr)); 
+  grid-template-columns: repeat(10, 1fr); /* 固定每行10列 */
   gap:6px; 
-  max-height:200px;
+  max-height:260px;
   overflow-y:auto;
 }
 .road-dot { 
-  width:24px; height:24px; border-radius:4px; 
+  aspect-ratio: 1; /* 保持正方形 */
+  width:100%; 
+  border-radius:4px; 
   display:flex; align-items:center; justify-content:center; 
   font-size:10px; font-weight:700; 
 }
