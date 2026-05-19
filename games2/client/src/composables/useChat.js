@@ -14,14 +14,31 @@ const RECONNECT_DELAY = 3000
 const connected = ref(false)
 const messages = ref([])
 const unreadCount = ref(0)
-const sessionStatus = ref(null)    // 'waiting' | 'active' | 'closed'
+const sessionStatus = ref(null)
 const adminName = ref('')
 const currentSessionId = ref(null)
 
+// ========== 消息提醒音效 ==========
+let notificationAudio = null
+
+function playNotificationSound(sender) {
+  try {
+    const role = localStorage.getItem('userRole')
+    // 只播放对方消息的提醒，不播放自己的
+    if (role === 'admin' && sender !== 'user') return
+    if (role !== 'admin' && sender !== 'admin') return
+
+    if (!notificationAudio) {
+      notificationAudio = new Audio('/assets/sounds/sfx/click.mp3')
+      notificationAudio.volume = 0.6
+    }
+    notificationAudio.currentTime = 0
+    notificationAudio.play().catch(() => {})
+  } catch {}
+}
+
 export function useChat() {
   const { token, isLoggedIn } = useAuth()
-
-  // ========== 工具方法 ==========
 
   function isValidId(id) {
     return /^[0-9a-fA-F]{24}$/.test(id)
@@ -33,17 +50,14 @@ export function useChat() {
     const savedToken = localStorage.getItem('token') || token.value
     if (!savedToken) return null
 
-    // 生产环境：直接连后端域名
     if (import.meta.env.PROD) {
       return `wss://honlan.zeabur.app/ws?token=${savedToken}`
     }
-    // 开发环境：走当前 host（Vite proxy 会转发 /ws）
     const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
     return `${protocol}://${location.host}/ws?token=${savedToken}`
   }
 
   function connect() {
-    // 防止重复连接
     if (wsInstance) {
       const state = wsInstance.readyState
       if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) return
@@ -74,6 +88,10 @@ export function useChat() {
             const exists = messages.value.find(m => m.id === data.message.id)
             if (!exists) {
               messages.value.push(data.message)
+              // 🔔 消息提醒音效（仅对方消息）
+              if (data.type === 'chat_message') {
+                playNotificationSound(data.message.sender)
+              }
             }
             if (data.message.sessionId && data.message.sessionId !== 'undefined') {
               currentSessionId.value = data.message.sessionId
