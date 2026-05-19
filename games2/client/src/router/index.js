@@ -1,48 +1,21 @@
 /**
  * 巨人赛跑 - 路由配置
- * 登录页、游戏大厅、游戏房间、管理员后台
+ * [安全修复] 3.2 前端管理员路由守卫可绕过：改为从 JWT 解析角色，不从 localStorage 读取明文
  */
 import { createRouter, createWebHistory } from 'vue-router'
 
 const Login = () => import('../views/LoginView.vue')
-const GameLobby = () => import('../views/GameLobby.vue') // 这里作为真正的大厅过渡页
-const GiantGame = () => import('../views/GiantGame.vue') // 巨人赛跑游戏
-const PointingGame = () => import('../views/PointingGame.vue') // 点兵点将游戏
+const GameLobby = () => import('../views/GameLobby.vue')
+const GiantGame = () => import('../views/GiantGame.vue')
+const PointingGame = () => import('../views/PointingGame.vue')
 const AdminPanel = () => import('../views/AdminPanel.vue')
 
 const routes = [
-  {
-    path: '/login',
-    name: 'Login',
-    component: Login,
-    meta: { requiresAuth: false }
-  },
-  {
-    path: '/', 
-    name: 'GameLobby',
-    component: GameLobby,
-    meta: { requiresAuth: true }
-  },
-  // 巨人赛跑游戏页面路由
-  {
-    path: '/game/giant',
-    name: 'GiantRunner',
-    component: GiantGame,
-    meta: { requiresAuth: true }
-  },
-  // 点兵点将游戏页面路由
-  {
-    path: '/game/pointing',
-    name: 'PointingGame',
-    component: PointingGame,
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/admin',
-    name: 'Admin',
-    component: AdminPanel,
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
+  { path: '/login', name: 'Login', component: Login, meta: { requiresAuth: false } },
+  { path: '/', name: 'GameLobby', component: GameLobby, meta: { requiresAuth: true } },
+  { path: '/game/giant', name: 'GiantRunner', component: GiantGame, meta: { requiresAuth: true } },
+  { path: '/game/pointing', name: 'PointingGame', component: PointingGame, meta: { requiresAuth: true } },
+  { path: '/admin', name: 'Admin', component: AdminPanel, meta: { requiresAuth: true, requiresAdmin: true } },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 
@@ -51,17 +24,42 @@ const router = createRouter({
   routes
 })
 
+// 【安全修复】从 JWT Token 中解析用户角色，避免前端伪造
+function getUserRoleFromToken() {
+  const token = localStorage.getItem('token')
+  if (!token) return null
+  try {
+    const base64Url = token.split('.')[1]
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    )
+    const payload = JSON.parse(jsonPayload)
+    return payload.role // 返回后端签发的真实 role
+  } catch (e) {
+    return null // Token 解析失败（过期或格式错误）
+  }
+}
+
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
-  const userRole = localStorage.getItem('userRole')
+  const userRole = getUserRoleFromToken() // 关键修改：不再读取 localStorage.getItem('userRole')
+  
   console.log(`[路由] ${from.path} -> ${to.path}, token=${!!token}, role=${userRole}`)
 
   if (to.meta.requiresAuth && !token) return next('/login')
+  
   if (to.path === '/login' && token) {
-    // 已登录根据角色跳转（普通用户去大厅 '/'，管理员去后台 '/admin'）
+    // 已登录根据角色跳转
     return next(userRole === 'admin' ? '/admin' : '/')
   }
+  
+  // 只有 JWT 里真实解析出是 admin 才放行
   if (to.meta.requiresAdmin && userRole !== 'admin') return next('/')
+  
   next()
 })
 
