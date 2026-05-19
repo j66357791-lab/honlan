@@ -1,6 +1,7 @@
 /**
  * 巨人赛跑 - 游戏路由
  * 下注、余额查询、历史记录、积分明细
+ * + 自动清理旧记录机制，防止数据库爆炸
  */
 import { Router } from 'express';
 import User from '../models/User.js';
@@ -22,6 +23,10 @@ const ODDS_DRAW = 9;
 // 下注限制
 const MIN_BET = 10;
 const MAX_BET = 8000;
+
+// ========== 数据清理配置 ==========
+const MAX_BET_RECORDS = 100;       // 每个用户保留下注记录的最大条数
+const MAX_TRANSACTION_RECORDS = 200; // 每个用户保留积分明细的最大条数
 
 /**
  * 根据概率生成比赛结果
@@ -53,7 +58,6 @@ router.post('/bet', authMiddleware, async (req, res) => {
   try {
     const { choice, amount } = req.body;
     const userId = req.user.userId;
-
     console.log(`[下注] 用户=${req.user.phone}, 选择=${choice}, 金额=${amount}`);
 
     // 参数校验
@@ -85,7 +89,6 @@ router.post('/bet', authMiddleware, async (req, res) => {
 
     // 扣除下注金额
     user.balance -= betAmount;
-
     // 如果赢了，加回赔付
     if (win) {
       user.balance += payout;
@@ -124,16 +127,55 @@ router.post('/bet', authMiddleware, async (req, res) => {
       });
     }
 
-    console.log(`[下注] 结果: ${result}, 赢=${win}, 赔付=${payout}, 净变化=${netChange}, 余额=${user.balance}`);
+    // ================== [新增] 自动清理旧数据逻辑 ==================
+    // 清理逻辑放在 try...catch 中，即使清理失败也不影响下注主流程的返回
+    
+    // 1. 清理下注记录
+    try {
+      const betCount = await Bet.countDocuments({ userId });
+      if (betCount > MAX_BET_RECORDS) {
+        // 计算需要删除的多余条数
+        const excessCount = betCount - MAX_BET_RECORDS;
+        // 找到最旧的需要删除的记录ID
+        const oldestBets = await Bet.find({ userId })
+          .sort({ createdAt: 1 }) // 按时间正序，最旧的在前面
+          .limit(excessCount)
+          .select('_id');
+        
+        if (oldestBets.length > 0) {
+          const idsToDelete = oldestBets.map(b => b._id);
+          await Bet.deleteMany({ _id: { $in: idsToDelete } });
+          console.log(`[清理] 用户 ${user.phone} 删除了 ${idsToDelete.length} 条旧下注记录`);
+        }
+      }
+    } catch (cleanErr) {
+      console.error(`[清理] 下注记录清理失败: ${cleanErr.message}`);
+    }
 
-    res.json({
-      result,
-      win,
-      payout,
-      balance: user.balance,
-      netChange,
-      betId: bet._id
-    });
+    // 2. 清理积分明细
+    try {
+      const txCount = await Transaction.countDocuments({ userId });
+      if (txCount > MAX_TRANSACTION_RECORDS) {
+        const excessCount = txCount - MAX_TRANSACTION_RECORDS;
+        const oldestTx = await Transaction.find({ userId })
+          .sort({ createdAt: 1 })
+          .limit(excessCount)
+          .select('_id');
+        
+        if (oldestTx.length > 0) {
+          const idsToDelete = oldestTx.map(t => t._id);
+          await Transaction.deleteMany({ _id: { $in: idsToDelete } });
+          console.log(`[清理] 用户 ${user.phone} 删除了 ${idsToDelete.length} 条旧积分明细`);
+        }
+      }
+    } catch (cleanErr) {
+      console.error(`[清理] 积分明细清理失败: ${cleanErr.message}`);
+    }
+    // ============================================================
+
+    console.log(`[下注] 结果: ${result}, 赢=${win}, 赔付=${payout}, 净变化=${netChange}, 余额=${user.balance}`);
+    res.json({ result, win, payout, balance: user.balance, netChange, betId: bet._id });
+
   } catch (err) {
     console.error(`[下注] 错误: ${err.message}`);
     res.status(500).json({ error: '下注失败，请稍后重试' });
@@ -157,11 +199,12 @@ router.get('/balance', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/history - 获取下注历史（近50把）
+ * GET /api/history - 获取下注历史（修改为近100把，配合前端走势图）
  */
 router.get('/history', authMiddleware, async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 50, 50);
+    // 将最大限制从 50 修改为 100，默认也为 100
+    const limit = Math.min(parseInt(req.query.limit) || 100, 100);
     const list = await Bet.find({ userId: req.user.userId })
       .sort({ createdAt: -1 })
       .limit(limit);
