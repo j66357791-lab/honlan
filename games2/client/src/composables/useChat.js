@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { useAuth } from './useAuth.js'
 import { API_BASE } from '../config.js'
 
-// 全局单例：多个组件共享同一个连接
+// 全局单例
 let wsInstance = null
 let reconnectTimer = null
 let reconnectAttempts = 0
@@ -24,9 +24,9 @@ let notificationAudio = null
 function playNotificationSound(sender) {
   try {
     const role = localStorage.getItem('userRole')
-    // 只播放对方消息的提醒，不播放自己的
+    // 只播放对方消息的提醒
     if (role === 'admin' && sender !== 'user') return
-    if (role !== 'admin' && sender !== 'admin') return
+    if (role !== 'admin' && sender !== 'admin' && sender !== 'bot') return
 
     if (!notificationAudio) {
       notificationAudio = new Audio('/assets/sounds/sfx/click.mp3')
@@ -81,21 +81,47 @@ export function useChat() {
       let data
       try { data = JSON.parse(event.data) } catch { return }
 
+      const role = localStorage.getItem('userRole')
+
       switch (data.type) {
         case 'chat_message':
         case 'chat_message_sent':
           if (data.message) {
             const exists = messages.value.find(m => m.id === data.message.id)
             if (!exists) {
-              messages.value.push(data.message)
-              // 🔔 消息提醒音效（仅对方消息）
+              // 管理员：只添加当前查看会话的消息，避免串台
+              if (role === 'admin' && currentSessionId.value &&
+                  data.message.sessionId !== currentSessionId.value) {
+                // 不是当前会话的消息，不添加到列表，但增加红点
+              } else {
+                messages.value.push(data.message)
+              }
+
+              // 🔴 收到对方消息：红点+1 + 提示音
               if (data.type === 'chat_message') {
-                playNotificationSound(data.message.sender)
+                const sender = data.message.sender
+                if ((role === 'admin' && sender === 'user') ||
+                    (role !== 'admin' && (sender === 'admin' || sender === 'bot'))) {
+                  unreadCount.value += 1
+                  playNotificationSound(sender)
+                }
               }
             }
+
+            // 用户端自动关联 sessionId
             if (data.message.sessionId && data.message.sessionId !== 'undefined') {
-              currentSessionId.value = data.message.sessionId
+              if (!currentSessionId.value) {
+                currentSessionId.value = data.message.sessionId
+              }
             }
+          }
+          break
+
+        case 'session_new':
+          // 管理员收到新会话通知：红点+1 + 提示音
+          if (role === 'admin') {
+            unreadCount.value += 1
+            playNotificationSound('user')
           }
           break
 
@@ -119,6 +145,10 @@ export function useChat() {
           })
           break
 
+        case 'session_update':
+          // 会话状态变更，管理员可以据此刷新列表
+          break
+
         case 'system':
           messages.value.push({
             id: Date.now(), sender: 'system',
@@ -132,6 +162,10 @@ export function useChat() {
           break
 
         case 'chat_read_ok':
+          // 用户标记已读后清除红点
+          if (role !== 'admin') {
+            unreadCount.value = 0
+          }
           break
 
         case 'error':
@@ -212,6 +246,12 @@ export function useChat() {
     currentSessionId.value = null
   }
 
+  // ========== 清除红点（管理员用） ==========
+
+  function clearUnread() {
+    unreadCount.value = 0
+  }
+
   // ========== 加载历史消息 ==========
 
   async function loadHistory(sessionId) {
@@ -268,6 +308,6 @@ export function useChat() {
   return {
     connected, messages, unreadCount, sessionStatus, adminName, currentSessionId,
     connect, disconnect, sendMessage, markRead, loadHistory,
-    acceptSession, closeSession, fetchSessions, resetSession
+    acceptSession, closeSession, fetchSessions, resetSession, clearUnread
   }
 }
