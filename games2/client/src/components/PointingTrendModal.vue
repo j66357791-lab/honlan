@@ -18,7 +18,7 @@
         </button>
       </div>
 
-      <!-- 统计占比 -->
+      <!-- 统计占比（根据英雄阵营统计） -->
       <div class="stats-row">
         <div class="stat-item male">
           <span class="label">男将胜</span>
@@ -91,6 +91,7 @@ const tabs = [
   { value: 100, label: 100 }
 ]
 
+// 英雄阵营与颜色映射
 const maleHeroNames = ['赵云', '关羽', '张飞', '马超']
 const femaleHeroNames = ['秦良玉', '梁红玉', '穆桂英', '花木兰']
 
@@ -105,30 +106,35 @@ const heroColors = {
   '花木兰': '#ef4444'
 }
 
-// 监听弹窗打开，自动请求后端接口
+// 🚀 核心：监听弹窗打开，自动请求后端接口
 watch(() => props.visible, async (newVal) => {
   if (newVal) {
     await fetchTrendHistory()
   }
 }, { immediate: true })
 
-// 🚀 修复：不用 import，直接用原生 fetch + 相对路径（走 Vite 代理）
+// 🚀 核心：获取后端基础 URL（和巨人接口保持一致）
+const getApiBaseUrl = () => {
+  // 优先读取环境变量，和巨人游戏用同一个变量名
+  // 如果你项目用的是 VITE_BACKEND_URL，这里也改成 VITE_BACKEND_URL
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
+  return baseUrl
+}
+
+// 🚀 核心：请求走势历史数据
 const fetchTrendHistory = async () => {
   loading.value = true
   try {
-    // 1. 使用相对路径，会自动走你项目的 Vite 代理，没有跨域问题！
-    const apiUrl = '/api/pointing/history?limit=100'
-    
-    // 2. 从 localStorage 获取 Token (根据你项目存储 token 的 key 来写，一般是 'token' 或 'authToken')
-    const token = localStorage.getItem('token') 
-    
-    // 3. 发起请求，如果后端需要鉴权，必须带上 Authorization
+    const baseUrl = getApiBaseUrl()
+    const apiUrl = `${baseUrl}/api/pointing/history?limit=100`
+
+    const token = localStorage.getItem('token')
+
     const res = await fetch(apiUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        // 如果后端验证 token，就带上；如果不要 token，这句可删
-        'Authorization': token ? `Bearer ${token}` : '' 
+        'Authorization': token ? `Bearer ${token}` : ''
       }
     })
 
@@ -152,6 +158,7 @@ const currentList = computed(() => {
   return historyData.value.slice(0, activeTab.value)
 })
 
+// 性别统计
 const maleCount = computed(() => {
   return currentList.value.filter(item => 
     item.survivedCharacters?.some(hero => maleHeroNames.includes(hero))
@@ -168,6 +175,7 @@ const total = computed(() => currentList.value.length)
 const malePercent = computed(() => total.value ? ((maleCount.value / total.value) * 100).toFixed(1) : 0)
 const femalePercent = computed(() => total.value ? ((femaleCount.value / total.value) * 100).toFixed(1) : 0)
 
+// 英雄存活统计
 const heroes = computed(() => {
   const heroCounts = {}
   currentList.value.forEach(item => {
@@ -188,13 +196,13 @@ const heroes = computed(() => {
   }))
 })
 
+// 英雄开奖路子图
 const currentRoadMap = computed(() => {
   return currentList.value.map(item => ({
     heroes: item.survivedCharacters || []
   })).reverse()
 })
 </script>
-
 
 <style scoped>
 .modal-overlay {
@@ -283,10 +291,21 @@ const currentRoadMap = computed(() => {
   font-size: 12px;
 }
 
-.stat-item .label { font-weight: 600; }
-.stat-item.male .label { color: #1890ff; }
-.stat-item.female .label { color: #ff6b9d; }
-.stat-item .value { color: rgba(255, 255, 255, 0.8); }
+.stat-item .label {
+  font-weight: 600;
+}
+
+.stat-item.male .label {
+  color: #1890ff;
+}
+
+.stat-item.female .label {
+  color: #ff6b9d;
+}
+
+.stat-item .value {
+  color: rgba(255, 255, 255, 0.8);
+}
 
 .progress-bg {
   height: 6px;
@@ -301,9 +320,18 @@ const currentRoadMap = computed(() => {
   transition: width 0.3s;
 }
 
-.stat-item.male .progress-fill { background: #1890ff; }
-.stat-item.female .progress-fill { background: #ff6b9d; }
-.stat-item .percent { text-align: right; color: rgba(255, 255, 255, 0.6); }
+.stat-item.male .progress-fill {
+  background: #1890ff;
+}
+
+.stat-item.female .progress-fill {
+  background: #ff6b9d;
+}
+
+.stat-item .percent {
+  text-align: right;
+  color: rgba(255, 255, 255, 0.6);
+}
 
 .hero-stats-title {
   padding: 0 16px;
@@ -326,8 +354,14 @@ const currentRoadMap = computed(() => {
   font-size: 11px;
 }
 
-.hero-name { font-weight: 600; }
-.hero-count { color: rgba(255, 255, 255, 0.6); }
+.hero-name {
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 600;
+}
+
+.hero-count {
+  color: rgba(255, 255, 255, 0.6);
+}
 
 .hero-progress-bg {
   height: 4px;
