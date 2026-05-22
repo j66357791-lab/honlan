@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useAuth } from './useAuth.js'
 import { useMatchSound } from './useMatchSound.js'
+import { request } from './request.js' // ★ 新增：引入封装好的 request
 
 const boardMap = ref({})
 const gameState = ref('idle')
@@ -30,17 +31,19 @@ export function useMatch() {
     waveInfo.value = { wave: 0, waveScore: 0, totalScore: 0 }
 
     try {
-      const res = await fetch('/api/match/bet', {
+      // ★ 修改：使用 request 替代原生 fetch，会自动加上后端域名
+      const res = await request('/api/match/bet', {
         method: 'POST',
+        // Content-Type 不用写，你的 request.js 已经自动加上了
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         // ★ 修改：将门票价格发送给后端
         body: JSON.stringify({ ticketPrice })
       })
-
+      
       const data = await res.json()
+      
       if (!res.ok) {
         throw new Error(data.error || '请求失败')
       }
@@ -75,9 +78,10 @@ export function useMatch() {
       netProfit: result.netProfit,
       ticketPrice: result.ticketPrice // ★ 新增：保存门票价格给弹窗用
     }
-    updateBalance(result.balance)
 
+    updateBalance(result.balance)
     gameState.value = 'result'
+
     if (result.netProfit >= 0) {
       playWin()
     } else {
@@ -90,15 +94,10 @@ export function useMatch() {
       const map = {}
       frame.blocks.forEach(b => {
         map[b.uid] = {
-          uid: b.uid,
-          type: b.type,
-          row: b.fromRow,
-          targetRow: b.row,
-          col: b.col,
-          isRemoving: false
+          uid: b.uid, type: b.type, row: b.fromRow,
+          targetRow: b.row, col: b.col, isRemoving: false
         }
       })
-
       boardMap.value = map
 
       requestAnimationFrame(() => {
@@ -123,7 +122,6 @@ export function useMatch() {
         }
       })
       boardMap.value = { ...boardMap.value }
-
       playEliminate(frame.wave)
 
       setTimeout(() => {
@@ -141,12 +139,8 @@ export function useMatch() {
 
         frame.newBlocks.forEach(b => {
           boardMap.value[b.uid] = {
-            uid: b.uid,
-            type: b.type,
-            row: b.fromRow,
-            targetRow: b.row,
-            col: b.col,
-            isRemoving: false
+            uid: b.uid, type: b.type, row: b.fromRow,
+            targetRow: b.row, col: b.col, isRemoving: false
           }
         })
 
@@ -171,6 +165,7 @@ export function useMatch() {
           playDrop()
           resolve()
         }, ANIM.FALL)
+
       }, ANIM.ELIMINATE)
     })
   }
