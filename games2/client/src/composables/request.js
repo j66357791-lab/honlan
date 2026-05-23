@@ -17,25 +17,25 @@ export function request(url, options = {}) {
     ...options,
     headers: {
       ...defaultHeaders,
-      ...(options.headers || {}), // 允许调用时覆盖 headers
+      ...(options.headers || {}), 
     },
   })
   .then(async response => {
-    // 🚀 2. 统一拦截后端报错 (比如 401 未登录, 400 余额不足)
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: '网络请求失败' }))
-      const errMsg = errorData.error || `请求失败 (${response.status})`
-      
-      // 如果是 401，说明 token 失效或未登录，可以直接踢回登录页
-      if (response.status === 401) {
-        localStorage.removeItem('token')
+    // 🚀 2. 拦截 401 未登录/登录失效
+    if (response.status === 401) {
+      localStorage.removeItem('token')
+      if (window.location.pathname !== '/login') {
         window.location.href = '/login' 
       }
-      
-      // 将错误抛出，这样在组件里用 try/catch 就能 catch 到报错信息
-      throw new Error(errMsg)
     }
     
-    return response.json()
+    // 🚀 3. 拦截其他后端报错 (400, 500等)
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: '网络请求失败' }))
+      throw new Error(errorData.error || `请求失败 (${response.status})`)
+    }
+    
+    // 🚀 关键修复：返回原始 response，兼容旧代码里的 res.json()
+    return response; 
   })
 }
