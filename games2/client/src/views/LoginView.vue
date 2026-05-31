@@ -48,7 +48,7 @@
 import { ref, onMounted } from 'vue'  // ✅ 记得加上 onMounted
 import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth.js'
-import SkeletonLogin from '../components/SkeletonLogin.vue' // 引入登录骨架屏组件
+import SkeletonLogin from '../components/login/SkeletonLogin.vue' // 引入登录骨架屏组件
 
 const router = useRouter()
 const { login, register } = useAuth()
